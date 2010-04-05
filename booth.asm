@@ -12,8 +12,9 @@
 # -----------------------
 # 1) Algorithm will work better, if the number who has 'less bit transitions' is 
 #    initialized to X(multiplicand).
-# 2) Here is a good explanation of the algorithm with examples:
-#    http://ftp.csci.csusb.edu/schubert/tutorials/csci313/w04/TB_BoothTutorial.pdf
+# 2) Here some good explanations of the algorithm with examples:
+#    http://ftp.csci.csusb.edu/schubert/tutorials/csci313/w04/TL_Booth.pdf
+#	 http://ftp.csci.csusb.edu/schubert/tutorials/csci313/w04/TB_BoothTutorial.pdf
 #
 # Register Contents	:
 # -----------------------
@@ -59,6 +60,7 @@ sys_exit:			.word 10
 # ====== TEXT SEGMENT ====== #
 	.text
 	.globl main
+
 
 #	main of the program -initialization and accept inputs
 #	-----------------------------------------------------
@@ -198,6 +200,11 @@ case_01:
 	la   $a0, str_print_01_info
 	syscall
 
+	add  $s3, $s3, $s2		# add Y to U
+	andi $t0, $s3, 1		# LSB of U for overflow checking
+	bne  $t0, $zero, V		# if LSB of U not zero, goto update V
+	sra	 $s3, $s3, 1		# shift right arithmetic U by 1 bit
+	sra	 $s4, $s4, 1		# shift right arithmetic V by 1 bit
 	ror  $s1, $s1, 1		# rotate right X by 1 bit
 	addi $s0, $s0, 1		# decrement loop counter
 	andi $s5, $s5, 0		# X=0, so next time X-1=0
@@ -209,6 +216,11 @@ case_10:
 	la   $a0, str_print_10_info
 	syscall
 
+	sub  $s3, $s3, $s2		# sub Y from U
+	andi $t0, $s3, 1		# LSB of U for overflow checking
+	bne  $t0, $zero, V		# if LSB of U not zero, goto update V
+	sra	 $s3, $s3, 1		# shift right arithmetic U by 1 bit
+	sra	 $s4, $s4, 1		# shift right arithmetic V by 1 bit
 	ror  $s1, $s1, 1		# rotate right X by 1 bit
 	addi $s0, $s0, 1		# decrement loop counter
 	ori  $s5, $s5, 1		# X=1, so next time X-1=1
@@ -224,6 +236,14 @@ case_11:
 	addi $s0, $s0, 1		# decrement loop counter
 	j    print_step
 
+V:							# goal is to fill MSB of V with 1
+	addi $s4, $s4, 1		# increment V by 1 
+	ror  $s4, $s4, 1		# rotate right V
+	sra	 $s3, $s3, 1		# shift right arithmetic U by 1 bit
+	ror  $s1, $s1, 1		# rotate right X by 1 bit
+	addi $s0, $s0, 1		# decrement loop counter
+	andi $s5, $s5, 0		# X=0, so next time X-1=0
+	j    print_step
 
 #	exit -calculation completed, so print result
 #	--------------------------------------------
