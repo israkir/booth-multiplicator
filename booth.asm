@@ -23,6 +23,8 @@
 # $s3 = U --> holds the results from each step in the algorithm
 # $s4 = V --> holds the overflow from U, when right-shift
 # $s5 = X-1 --> holds the least significant bit from X before each right-shift
+# $s6 = N --> an extra bit to the left of U to be able to perform multiplication
+# 	      when multiplicand is the largest negative number
 #
 ###################################################################################
 
@@ -38,9 +40,10 @@ str_print_00_info:		.asciiz "00, nop shift"
 str_print_01_info:		.asciiz "01, add shift"
 str_print_10_info:		.asciiz "10, subtract shift"
 str_print_11_info:		.asciiz "11, nop shift"
-str_print_result:		.asciiz "\n\nCalculation result which is [concat(U, V)]: "
+str_print_result:		.asciiz "\n\nResult -> [concat(U, V) of Step=32]: "
 str_loop_counter:		.asciiz "\nStep="
 str_tab:			.asciiz "\t"
+str_n:				.asciiz "N="
 str_u:				.asciiz "U="
 str_v:				.asciiz "V="
 str_x:				.asciiz "X="
@@ -67,11 +70,12 @@ sys_exit:			.word 10
 #	-----------------------------------------------------
 
 main:
-	# initialize loop counter = 0, U=0, V=0, X-1=0
+	# initialize loop counter = 0, U=0, V=0, X-1=0, N=0
 	addi $s0, $zero, 0
 	addi $s3, $zero, 0
 	addi $s4, $zero, 0
 	addi $s5, $zero, 0
+	addi $s6, $zero, 0
 
 	# ask for multiplicand
 	lw   $v0, sys_print_string
@@ -100,7 +104,7 @@ main:
 print_step:
 
 	# check for the loop counter
-	beq  $s0, 32, exit
+	beq  $s0, 33, exit
 
 	# "Step"
 	lw   $v0, sys_print_string
@@ -110,6 +114,19 @@ print_step:
 	# Print step
 	lw   $v0, sys_print_int
 	add  $a0, $zero, $s0
+	syscall
+	lw   $v0, sys_print_string
+	la   $a0, str_tab
+	syscall
+
+	# "N"
+	lw   $v0, sys_print_string
+	la   $a0, str_n
+	syscall
+
+	# Print N
+	lw   $v0, sys_print_int
+	add  $a0, $zero, $s6
 	syscall
 	lw   $v0, sys_print_string
 	la   $a0, str_tab
@@ -183,12 +200,13 @@ x_lsb_1:				# when the LSB of X = 1
 	beq  $s5, $zero, case_10	# if (X-1 == 0) then goto "X=1 & X-1=0" case
 	j    case_11			# otherwise goto "X=1 & X-1=1" case
 
-case_00:				# basically do nothing, but rotate X
+case_00:
 	# print info
 	lw   $v0, sys_print_string
 	la   $a0, str_print_00_info
 	syscall
 	# do nothing, but shift
+	andi $s6, $s6, 0		# set N=0 anyway
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto update 
 	srl  $s4, $s4, 1		# shift right logical V by 1 bit
@@ -202,6 +220,7 @@ case_01:
 	# do addition and shift
 	add  $s3, $s3, $s2		# add Y to U
 	andi $s5, $s5, 0		# X=0, so next time X-1=0
+	ori  $s6, $s6, 1		# X-1=1, so next time N=1
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto update V
 	srl  $s4, $s4, 1		# shift right logical V by 1 bit
@@ -215,6 +234,7 @@ case_10:
 	# do subtract and shift
 	sub  $s3, $s3, $s2		# sub Y from U
 	ori  $s5, $s5, 1		# X=1, so next time X-1=1
+	andi $s6, $s6, 0		# X-1=0, so next time N=0
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto update V
 	srl  $s4, $s4, 1		# shift right logical V by 1 bit
@@ -226,6 +246,7 @@ case_11:
 	la   $a0, str_print_11_info
 	syscall
 	# do nothing, but shift
+	ori  $s6, $s6, 1		# set N=1 anyway
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto update
 	srl  $s4, $s4, 1		# shift right logical V by 1 bit
@@ -247,8 +268,13 @@ shift:
 	sra  $s3, $s3, 1		# shift right arithmetic U by 1 bit
 	ror  $s1, $s1, 1		# rotate right X by 1 bit
 	addi $s0, $s0, 1		# decrement loop counter
+	beq  $s0, 32, save		# if it is last step, save the contents of the regs for result
 	j    print_step			# loop again
 
+save:
+	add  $t1, $zero, $s3		# save U in $t1
+	add  $t2, $zero, $s4		# save V in $t2
+	j    print_step			# loop again
 
 #	exit -calculation completed, so print result
 #	--------------------------------------------
@@ -261,13 +287,13 @@ exit:
 	
 	# Call U
 	lw   $v0, sys_print_binary
-	add  $a0, $zero, $s3
+	add  $a0, $zero, $t1
 	syscall
 	# Call V
 	lw   $v0, sys_print_binary
-	add  $a0, $zero, $s4
+	add  $a0, $zero, $t2
 	syscall
 	
-	# exit
+	# Exit
 	lw   $v0, sys_exit
 	syscall
