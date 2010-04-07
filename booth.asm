@@ -67,10 +67,8 @@ sys_exit:			.word 10
 #	-----------------------------------------------------
 
 main:
-	# initialize loop counter = 0
+	# initialize loop counter = 0, U=0, V=0, X-1=0
 	addi $s0, $zero, 0
-
-	# initialize U=0, V=0, X-1=0
 	addi $s3, $zero, 0
 	addi $s4, $zero, 0
 	addi $s5, $zero, 0
@@ -90,7 +88,7 @@ main:
 	la   $a0, str_enter_multiplier
 	syscall
 
-	# get integer into multiplier
+	# get integer into $s2
 	lw   $v0, sys_read_int
 	syscall
 	add  $s2, $zero, $v0
@@ -191,9 +189,9 @@ case_00:				# basically do nothing, but rotate X
 	la   $a0, str_print_00_info
 	syscall
 	# do nothing, but shift
-	srl  $s4, $s4, 1		# shift right logical V by 1 bit
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto update 
+	srl  $s4, $s4, 1		# shift right logical V by 1 bit
 	j    shift
 
 case_01:
@@ -228,16 +226,17 @@ case_11:
 	la   $a0, str_print_11_info
 	syscall
 	# do nothing, but shift
-	srl  $s4, $s4, 1		# shift right logical V by 1 bit
 	andi $t0, $s3, 1		# LSB of U for overflow checking
-	bne  $t0, $zero, V		# if LSB of U not zero, goto update 
+	bne  $t0, $zero, V		# if LSB of U not zero, goto update
+	srl  $s4, $s4, 1		# shift right logical V by 1 bit
 	j    shift 
 
 V:
 	andi $t0, $s4, 0x80000000	# What is the MSB of V?
 	bne  $t0, $zero, shiftV		# If MSB == 1, goto shiftV
-	ori  $s4, $s4, 0x80000000	# MSB 0f V = 1
-	j	 shift
+	srl  $s4, $s4, 1		# MSB == 0, so first shift right logical V by 1
+	ori  $s4, $s4, 0x80000000	# then make MSB of V = 1
+	j    shift
 
 shiftV:
 	srl  $s4, $s4, 1
