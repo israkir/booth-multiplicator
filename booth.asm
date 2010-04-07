@@ -255,12 +255,12 @@ case_11:
 
 V:
 	andi $t0, $s4, 0x80000000	# What is the MSB of V?
-	bne  $t0, $zero, shiftV		# If MSB == 1, goto shiftV
+	bne  $t0, $zero, v_msb_1	# If MSB == 1, goto v_msb_1
 	srl  $s4, $s4, 1		# MSB == 0, so first shift right logical V by 1-bit
 	ori  $s4, $s4, 0x80000000	# then make MSB of V = 1
 	j    shift			# goto shift other variables
 
-shiftV:
+v_msb_1:
 	srl  $s4, $s4, 1		# shift right logical V by 1-bit
 	ori  $s4, $s4, 0x80000000	# MSB 0f V = 1
 	j    shift			# goto shift other variables
