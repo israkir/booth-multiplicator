@@ -12,20 +12,23 @@
 # Notes			:
 # -----------------------
 # 1) Algorithm will work better, if the number who has 'less bit transitions' is 
-#    initialized to X(as multiplicand).
-# 2) Here some good explanations of the algorithm with examples:
+#    initialized to X (as multiplier).
+# 2) Overflow case, when multiplicand is the largest negative integer, is taken
+#    into consideration in the implementation.
+# 3) Here some good explanations of the algorithm with examples:
 #    http://ftp.csci.csusb.edu/schubert/tutorials/csci313/w04/TL_Booth.pdf
 #    http://ftp.csci.csusb.edu/schubert/tutorials/csci313/w04/TB_BoothTutorial.pdf
 #
 # Register Contents	:
 # -----------------------
 # $s0 = loop counter
-# $s1 = X(multiplicand), $s2 = Y(multiplier)
+# $s1 = X (multiplier) 
+# $s2 = Y (multiplicand)
 # $s3 = U --> holds the results from each step in the algorithm
 # $s4 = V --> holds the overflow from U, when right-shift
 # $s5 = X-1 --> holds the least significant bit from X before each right-shift
 # $s6 = N --> an extra bit to the left of U to perform multiplication
-# 	      when multiplier is the largest negative number
+# 	      when multiplicand is the largest negative number
 #
 ###################################################################################
 
@@ -78,9 +81,9 @@ main:
 	addi $s5, $zero, 0
 	addi $s6, $zero, 0
 
-	# ask for multiplicand
+	# ask for multiplier
 	lw   $v0, sys_print_string
-	la   $a0, str_enter_multiplicand
+	la   $a0, str_enter_multiplier
 	syscall
 
 	# get integer into $s1
@@ -88,9 +91,9 @@ main:
 	syscall
 	add  $s1, $zero, $v0
 
-	# ask for multiplier
+	# ask for multiplicand
 	lw   $v0, sys_print_string
-	la   $a0, str_enter_multiplier
+	la   $a0, str_enter_multiplicand
 	syscall
 
 	# get integer into $s2
@@ -207,7 +210,6 @@ case_00:
 	la   $a0, str_print_00_info
 	syscall
 	# do nothing, but shifting
-	andi $s6, $s6, 0		# set N=0 anyway
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto V, i.e. U overflows
 	srl  $s4, $s4, 1		# shift right logical V by 1-bit
@@ -218,10 +220,13 @@ case_01:
 	lw   $v0, sys_print_string
 	la   $a0, str_print_01_info
 	syscall
+
+	# check for special case -is multiplier the largest negative number?
+	beq  $s2, -2147483648, do_special_add
+
 	# do addition and shifting
 	add  $s3, $s3, $s2		# add Y to U
 	andi $s5, $s5, 0		# X=0, so next time X-1=0
-	ori  $s6, $s6, 1		# X-1=1, so next time N=1
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto V, i.e. U overflows
 	srl  $s4, $s4, 1		# shift right logical V by 1-bit
@@ -232,12 +237,15 @@ case_10:
 	lw   $v0, sys_print_string
 	la   $a0, str_print_10_info
 	syscall
+	
+	# check for special case -is multiplier the largest negative number?
+	beq  $s2, -2147483648, do_special_sub
+
 	# do subtract and shifting
 	sub  $s3, $s3, $s2		# sub Y from U
 	ori  $s5, $s5, 1		# X=1, so next time X-1=1
-	andi $s6, $s6, 0		# X-1=0, so next time N=0
 	andi $t0, $s3, 1		# LSB of U for overflow checking
-	bne  $t0, $zero, V		# if LSB of U not zero, goto update V
+	bne  $t0, $zero, V		# if LSB of U not zero, goto V, i.e. U overflows
 	srl  $s4, $s4, 1		# shift right logical V by 1-bit
 	j    shift			# goto shift other variables
 
@@ -247,7 +255,6 @@ case_11:
 	la   $a0, str_print_11_info
 	syscall
 	# do nothing, but shifting
-	ori  $s6, $s6, 1		# set N=1 anyway
 	andi $t0, $s3, 1		# LSB of U for overflow checking
 	bne  $t0, $zero, V		# if LSB of U not zero, goto update
 	srl  $s4, $s4, 1		# shift right logical V by 1-bit
@@ -275,6 +282,44 @@ shift:
 save:
 	add  $t1, $zero, $s3		# save U in $t1
 	add  $t2, $zero, $s4		# save V in $t2
+	j    print_step			# loop again	
+
+
+#	special case -multiplicand is the largest negative integer
+#	----------------------------------------------------------	
+
+do_special_sub:				# to ignore overflow on U by adding variable N as MSB of U
+	subu $s3, $s3, $s2		# sub Y from U
+	andi $s6, $s6, 0		# set N=0
+	ori  $s5, $s5, 1		# X=1, so next time X-1=1
+	andi $t0, $s3, 1		# LSB of U for overflow checking
+	bne  $t0, $zero, V		# if LSB of U not zero, goto V, i.e. U overflows
+	srl  $s4, $s4, 1		# shift right logical V by 1-bit
+	j    shift_special		# goto shift_special, we gotta check N for updating U
+
+do_special_add:				# to ignore overflow on U by adding variable N as MSB of U
+	addu $s3, $s3, $s2		# add Y to U
+	ori  $s6, $s6, 1		# set N=1
+	andi $s5, $s5, 0		# X=0, so next time X-1=0
+	andi $t0, $s3, 1		# LSB of U for overflow checking
+	bne  $t0, $zero, V		# if LSB of U not zero, goto V, i.e. U overflows
+	srl  $s4, $s4, 1		# shift right logical V by 1-bit
+	j    shift_special		# goto shift_special, we gotta check N for updating U
+	
+	
+shift_special:
+	beq  $s6, $zero, n_0	# if (N==0) then goto n_0
+	sra  $s3, $s3, 1		# shift right arithmetic U by 1-bit
+	ror  $s1, $s1, 1		# rotate right X by 1-bit
+	addi $s0, $s0, 1		# decrement loop counter
+	beq  $s0, 32, save		# if it is last step, save the contents of the regs for result
+	j    print_step			# loop again
+
+n_0:
+	srl  $s3, $s3, 1		# shift right logic U by 1-bit, because N=0
+	ror  $s1, $s1, 1		# rotate right X by 1-bit
+	addi $s0, $s0, 1		# decrement loop counter
+	beq  $s0, 32, save		# if it is last step, save the contents of the regs for result
 	j    print_step			# loop again
 
 
